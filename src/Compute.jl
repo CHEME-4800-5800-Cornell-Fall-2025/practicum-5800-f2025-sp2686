@@ -1,5 +1,3 @@
-
-
 # Minimal compute utilities for the Hopfield practicum
 
 # compute energy for a ±1 integer state vector s
@@ -14,15 +12,13 @@ hamming(a::AbstractVector, b::AbstractVector) = sum(a .!= b)
 """
     recover(model, s0, true_image_energy; maxiterations=1000, patience=5, miniterations_before_convergence=nothing)
 
-Asynchronous Hopfield recovery. Returns (frames, energydictionary) where frames::Dict{Int,Array{Int32,1}}
-and energydictionary::Dict{Int,Float32}.
+Asynchronous Hopfield recovery. Returns (frames, energydictionary).
 """
 function recover(model, s0::AbstractVector{<:Integer}, true_image_energy::Real;
                  maxiterations::Int = 1000,
                  patience::Int = 5,
                  miniterations_before_convergence::Union{Int,Nothing} = nothing)
 
-    # extract fields (works whether model is defined in Main or in Types)
     W = getfield(model, :W)
     b = getfield(model, :b)
     memories = hasfield(typeof(model), :memories) ? getfield(model, :memories) : nothing
@@ -36,13 +32,12 @@ function recover(model, s0::AbstractVector{<:Integer}, true_image_energy::Real;
 
     miniter = miniterations_before_convergence === nothing ? max(patience, 1) : miniterations_before_convergence
 
-    # helper: exact-memory match
     function _matches_any_memory(svec, mems)
         if mems === nothing
             return false
         end
         for k in 1:size(mems, 2)
-            if all(svec .== mems[:, k])
+            if isequal(svec, mems[:, k])
                 return true
             end
         end
@@ -63,18 +58,22 @@ function recover(model, s0::AbstractVector{<:Integer}, true_image_energy::Real;
         if length(recent) > patience
             popfirst!(recent)
         end
-    if t >= miniter
--            identical_recent = length(recent) >= patience && all(recent[j] .== recent[1] for j in eachindex(recent))
-+            # compare whole vectors (== returns Bool for vectors) rather than producing BitVectors
-+            identical_recent = length(recent) >= patience && all(x -> x == recent[1], recent)
-             if identical_recent
-                 return frames, energydictionary
-             end
 
-        
+        if t >= miniter
+
+            # FIXED: guaranteed-bool vector comparison
+            identical_recent =
+                length(recent) >= patience &&
+                all(x -> isequal(x, recent[1]), recent)
+
+            if identical_recent
+                return frames, energydictionary
+            end
+
             if _matches_any_memory(s, memories)
                 return frames, energydictionary
             end
+
             if energydictionary[t] <= Float32(true_image_energy)
                 return frames, energydictionary
             end
